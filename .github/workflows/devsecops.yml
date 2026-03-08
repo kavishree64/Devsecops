@@ -1,0 +1,145 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  # ─────────────────────────────────────────────────────────
+  # Stage 1: Secrets Scanning with Gitleaks
+  # ─────────────────────────────────────────────────────────
+  secrets-scan:
+    name: "🔐 Secrets Scan (Gitleaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git scan
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --exit-code=1 --report-format=sarif --report-path=gitleaks-report.sarif
+
+      - name: Upload Gitleaks SARIF report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks-report.sarif
+          category: "gitleaks"
+
+  # ─────────────────────────────────────────────────────────
+  # Stage 2: Software Composition Analysis (OWASP)
+  # ─────────────────────────────────────────────────────────
+  dependency-check:
+    name: "📦 SCA (OWASP Dependency-Check)"
+    runs-on: ubuntu-latest
+    needs: secrets-scan
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache NVD database
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check/data
+          key: nvd-cache-${{ hashFiles('**/*.json', '**/*.xml', '**/*.txt') }}
+          restore-keys: nvd-cache-
+
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'Secure Bank App'
+          path: '.'
+          format: 'HTML,JSON,SARIF'
+          out: 'reports/dependency-check'
+          args: >
+            --enableRetired
+            --enableExperimental
+            --failOnCVSS 7
+
+      - name: Upload Dep-Check HTML Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/dependency-check/dependency-check-report.html
+          retention-days: 30
+
+      - name: Upload Dep-Check SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/dependency-check/dependency-check-report.sarif
+          category: "owasp-dependency-check"
+
+  # ─────────────────────────────────────────────────────────
+  # Stage 3: Static Application Security Testing (SonarQube)
+  # ─────────────────────────────────────────────────────────
+  sonarqube-sast:
+    name: "🔍 SAST (SonarQube)"
+    runs-on: ubuntu-latest
+    needs: secrets-scan
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for SonarQube branch analysis
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Run SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=secure-bank-app
+            -Dsonar.projectName="Secure Bank App"
+            -Dsonar.sources=code
+            -Dsonar.exclusions=**/*.zip,**/*.jar
+
+      - name: Quality Gate Check
+        uses: SonarSource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  # ─────────────────────────────────────────────────────────
+  # Stage 4: Pipeline Summary
+  # ─────────────────────────────────────────────────────────
+  pipeline-summary:
+    name: "📊 Pipeline Summary"
+    runs-on: ubuntu-latest
+    needs: [secrets-scan, dependency-check, sonarqube-sast]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## 🔒 DevSecOps Pipeline Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔐 Gitleaks (Secrets) | ${{ needs.secrets-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📦 OWASP Dep-Check (SCA) | ${{ needs.dependency-check.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔍 SonarQube (SAST) | ${{ needs.sonarqube-sast.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Scan completed at: $(date -u)" >> $GITHUB_STEP_SUMMARY

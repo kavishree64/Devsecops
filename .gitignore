@@ -1,0 +1,38 @@
+# ── Large tool binaries (already downloaded, DO NOT push) ──────
+sonarqube-26.3.0.120487/
+sonar-scanner-5.0.1.3006-linux/
+dependency-check/
+gitleaks/
+gitleaks-bin/
+
+# ── ZIP archives ───────────────────────────────────────────────
+*.zip
+
+# ── Scan reports (generated, not source) ──────────────────────
+reports/
+gitleaks_report.json
+
+# ── SonarQube scanner cache ────────────────────────────────────
+code/.scannerwork/
+.sonar/
+
+# ── Environment / secrets (NEVER commit) ──────────────────────
+.env
+.env.*
+*.env
+secrets.txt
+credentials.txt
+
+# ── OS / editor junk ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.log
+
+# ── Python cache ──────────────────────────────────────────────
+__pycache__/
+*.pyc

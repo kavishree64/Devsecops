@@ -1,0 +1,48 @@
+# Gitleaks Project Configuration
+# Extends the default Gitleaks ruleset and adds PHP/web-specific patterns
+
+title = "Secure Bank App - Gitleaks Config"
+
+[extend]
+useDefault = true
+
+# ── Allowlist — suppress known false positives ──────────────────────────────
+[[allowlists]]
+description = "Ignore test data and vendor files"
+paths = [
+  '''.*test\.php$''',
+  '''.*vendor/.*''',
+  '''.*\.min\.js$'''
+]
+
+[[allowlists]]
+description = "Ignore known example strings"
+stopwords = [
+  "example",
+  "placeholder",
+  "your_token_here",
+  "REPLACE_ME"
+]
+
+# ── Custom rule: PHP DB credentials ──────────────────────────────────────────
+[[rules]]
+id = "php-db-password"
+description = "Hardcoded PHP database password"
+regex = '''(?i)\$db_pass\s*=\s*["'][^"']{4,}["']'''
+keywords = ["db_pass", "db_password", "dbpassword"]
+tags = ["php", "database", "secret", "cwe-798"]
+
+[[rules]]
+id = "php-hardcoded-credential"
+description = "Hardcoded credential variable in PHP"
+regex = '''(?i)\$(password|passwd|pwd|secret|api_key|apikey|token)\s*=\s*["'][^"']{6,}["']'''
+keywords = ["password", "passwd", "secret", "api_key", "token"]
+tags = ["php", "credential", "cwe-798"]
+
+# ── Custom rule: MySQL connection strings ─────────────────────────────────────
+[[rules]]
+id = "php-mysqli-hardcoded"
+description = "mysqli_connect with hardcoded credentials"
+regex = '''mysqli_connect\s*\([^)]*["'][^"']{4,}["'][^)]*\)'''
+keywords = ["mysqli_connect", "mysql_connect"]
+tags = ["php", "database", "cwe-798"]
