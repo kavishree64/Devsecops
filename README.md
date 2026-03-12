@@ -11,7 +11,7 @@ A **modular, automated security scanning pipeline** integrating secrets detectio
 ## 🗂 Project Structure
 
 ```
-mp/
+Devsecops/
 ├── code/              ← Target application (vulnerable PHP demo)
 ├── scripts/           ← Automation scripts (scan, report, CI)
 ├── docs/
